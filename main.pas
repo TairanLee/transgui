@@ -6993,6 +6993,31 @@ begin
 end;
 
 procedure TMainForm.FillStatistics(s: TJSONObject);
+var
+  currentStats, cumulativeStats: TJSONObject;
+
+  function _GetStats(const name: string; out stats: TJSONObject): boolean;
+  var
+    d: TJSONData;
+
+    function _IsNumber(const name: string): boolean;
+    begin
+      Result:=stats.IndexOfName(name) >= 0;
+      if Result then
+        Result:=stats.Items[name].JSONType = jtNumber;
+    end;
+
+  begin
+    Result:=False;
+    if s.IndexOfName(name) < 0 then
+      exit;
+    d:=s.Items[name];
+    if not (d is TJSONObject) then
+      exit;
+    stats:=d as TJSONObject;
+    Result:=_IsNumber('downloadedBytes') and _IsNumber('uploadedBytes') and
+      _IsNumber('filesAdded') and _IsNumber('secondsActive');
+  end;
 
   procedure _Fill(idx: integer; s: TJSONObject);
   begin
@@ -7011,12 +7036,17 @@ begin
     ClearDetailsInfo;
     exit;
   end;
+  if not _GetStats('current-stats', currentStats) or
+    not _GetStats('cumulative-stats', cumulativeStats) then begin
+    ClearDetailsInfo;
+    exit;
+  end;
   gStats.BeginUpdate;
   try
     gStats.Enabled:=True;
     gStats.Color:=clWindow;
-    _Fill(1, s.Objects['current-stats']);
-    _Fill(2, s.Objects['cumulative-stats']);
+    _Fill(1, currentStats);
+    _Fill(2, cumulativeStats);
   finally
     gStats.EndUpdate;
   end;
