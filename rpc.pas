@@ -1081,10 +1081,9 @@ begin
       args.Add('format', 'table');
 
     req.Add('arguments', args);
-    if FRPCVersion >= 16 then
-      Result:=TranslateTableToObjects(SendRequest(req))
-    else
-      Result:=SendRequest(req);
+    Result:=SendRequest(req);
+    if (FRPCVersion >= 16) and (Result <> nil) then
+      Result:=TranslateTableToObjects(Result);
   finally
     sl.Free;
     req.Free;
