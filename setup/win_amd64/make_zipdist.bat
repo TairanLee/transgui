@@ -9,16 +9,19 @@ if "%1" NEQ "" (
 )
 
 set path=%LAZARUS_DIR%;%LAZARUS_DIR%\fpc\3.2.2\bin\x86_64-win64;%path%
+set "PROG_VER="
+set /p "PROG_VER="<..\..\VERSION.txt
+if not defined PROG_VER goto err
 
 lazbuild -B ../../transgui.lpi
 if errorlevel 1 goto err
-make -C ../.. clean
+make "PROG_VER=%PROG_VER%" -C ../.. clean
 if errorlevel 1 goto err
-make -C ../.. all
+make "PROG_VER=%PROG_VER%" -C ../.. all
 if errorlevel 1 goto err
 upx --best ../../transgui.exe
 if errorlevel 1 goto err
-make -C ../.. zipdist
+make "PROG_VER=%PROG_VER%" -C ../.. zipdist
 if errorlevel 1 goto err
 
 pause
