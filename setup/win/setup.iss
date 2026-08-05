@@ -53,6 +53,7 @@ Name: "zh_cn"; MessagesFile: "..\..\Inno Setup lang\ChineseSimplified.isl"
 [Setup]
 AppId=transgui
 AppName={#AppName}
+AppVersion={#AppVersion}
 AppVerName={#AppVerName}
 AppCopyright=Copyright (c) 2008-{#CurYear} by Yury Sidorov & Transmission Remote GUI working group
 AppPublisher={#AppPublisher}
