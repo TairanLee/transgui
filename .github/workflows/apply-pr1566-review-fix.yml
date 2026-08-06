@@ -53,3 +53,5 @@ jobs:
           git add setup/win/setup.iss setup/win_amd64/setup.iss
           git commit -m 'Preserve the full installed Windows version'
           git push origin HEAD:fix/windows-installed-version
+
+# Trigger after the workflow exists on the branch.
