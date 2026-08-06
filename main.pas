@@ -699,6 +699,7 @@ type
     FAddingTorrent: integer;
     FPendingTorrents: TStringList;
     FLinksFromClipboard: boolean;
+    FCheckingClipboardLink: boolean;
     FLastClipboardLink: string;
     FLinuxOpenDoc: integer; // no del!
     FFromNow: boolean;
@@ -1179,6 +1180,59 @@ function HasIPCRecordDelimiter(const Value: string): boolean;
 begin
   Result:=(Pos(#0, Value) > 0) or (Pos(#10, Value) > 0) or
     (Pos(#13, Value) > 0);
+end;
+
+function TryReadClipboardText(out ClipboardText: string): boolean;
+begin
+  Result:=False;
+  ClipboardText:='';
+  try
+    if not Clipboard.HasFormat(CF_Text) then
+      exit;
+    ClipboardText:=Clipboard.AsText;
+    Result:=True;
+  except
+    // Clipboard backends can fail transiently; skip this activation.
+  end;
+end;
+
+function TryNormalizeClipboardTorrentLink(const ClipboardText: string;
+  out TorrentLink: string): boolean;
+const
+  TorrentExt = '.torrent';
+begin
+  Result:=False;
+  TorrentLink:='';
+  if HasIPCRecordDelimiter(ClipboardText) then
+    exit;
+  TorrentLink:=Trim(ClipboardText);
+  if TorrentLink = '' then
+    exit;
+  if IsHash(TorrentLink) then
+    TorrentLink:='magnet:?xt=urn:btih:' + TorrentLink;
+  if not IsProtocolSupported(TorrentLink) then
+    exit;
+  if not (AnsiStartsText('magnet:', TorrentLink) or
+          AnsiEndsText(TorrentExt, TorrentLink)) then
+    exit;
+  Result:=True;
+end;
+
+function TryClearClipboardText(const ExpectedText: string): boolean;
+var
+  ClipboardText: string;
+begin
+  Result:=False;
+  if not TryReadClipboardText(ClipboardText) then
+    exit;
+  if ClipboardText <> ExpectedText then
+    exit;
+  try
+    Clipboard.AsText:='';
+    Result:=True;
+  except
+    // Preserve the clipboard and duplicate guard if clearing fails.
+  end;
 end;
 
 procedure AddTorrentFile(const FileName: string);
@@ -8043,31 +8097,40 @@ begin
 end;
 
 procedure TMainForm.CheckClipboardLink;
-const
-  strTorrentExt = '.torrent';
 var
-  s: string;
+  ClipboardText, TorrentLink: string;
 begin
+  if not FLinksFromClipboard or FCheckingClipboardLink or
+    (csDestroying in ComponentState) or (FPendingTorrents = nil) then
+      exit;
+  FCheckingClipboardLink:=True;
   try
-    if not FLinksFromClipboard then
-      exit;
-    s:=Clipboard.AsText;
-    if s = FLastClipboardLink then
-      exit;
-    FLastClipboardLink:=s;
-    if isHash(s) then s := 'magnet:?xt=urn:btih:' + s;
-    if not IsProtocolSupported(s) then
-      exit;
-    if (Pos('magnet:', LazUTF8.UTF8LowerCase(s)) <> 1) and (LazUTF8.UTF8LowerCase(Copy(s, Length(s) - Length(strTorrentExt) + 1, MaxInt)) <> strTorrentExt) then
-      exit;
-    if HasIPCRecordDelimiter(s) then
-      exit;
+    try
+      if not TryReadClipboardText(ClipboardText) then
+        exit;
+      if ClipboardText = FLastClipboardLink then
+        exit;
+      if not TryNormalizeClipboardTorrentLink(ClipboardText, TorrentLink) then begin
+        FLastClipboardLink:=ClipboardText;
+        exit;
+      end;
 
-    AddTorrentFile(s);
-    Clipboard.AsText:='';
-  except
-    // Turn off this function if an error occurs
-    FLinksFromClipboard:=False;
+      try
+        // This handler runs only in the primary process. TickTimerTimer
+        // drains this list through CheckAddTorrents.
+        FPendingTorrents.Add(TorrentLink);
+      except
+        // Preserve the clipboard and retry this link on a later activation.
+        exit;
+      end;
+      FLastClipboardLink:=ClipboardText;
+      if TryClearClipboardText(ClipboardText) then
+        FLastClipboardLink:='';
+    except
+      // Clipboard monitoring is optional; retry on a later activation.
+    end;
+  finally
+    FCheckingClipboardLink:=False;
   end;
 end;
 
