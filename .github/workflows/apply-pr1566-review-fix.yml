@@ -1,0 +1,55 @@
+name: Apply PR 1566 review fix
+
+on:
+  push:
+    branches:
+      - fix/windows-installed-version
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/windows-installed-version
+          fetch-depth: 0
+
+      - name: Apply installer version fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          for name in ('setup/win/setup.iss', 'setup/win_amd64/setup.iss'):
+              path = Path(name)
+              data = path.read_bytes()
+              newline = b'\r\n' if b'\r\n' in data else b'\n'
+              text = data.decode('utf-8').replace('\r\n', '\n')
+              marker = "#ifndef AppVersion\n"
+              prefix = (
+                  "#define AppDisplayVersion GetFileVersion(SourcePath+'..\\\\..\\\\transgui.exe')\n"
+                  "#define AppDisplayVersion Copy(AppDisplayVersion, 1, RPos('.', AppDisplayVersion) - 1)\n\n"
+              )
+              if text.count(marker) != 1:
+                  raise SystemExit(f'{name}: expected one AppVersion guard')
+              text = text.replace(marker, prefix + marker, 1)
+              old = 'AppVersion={#AppVersion}\n'
+              new = 'AppVersion={#AppDisplayVersion}\n'
+              if text.count(old) != 1:
+                  raise SystemExit(f'{name}: expected one AppVersion directive')
+              text = text.replace(old, new, 1)
+              path.write_bytes(text.replace('\n', newline.decode()).encode('utf-8'))
+          PY
+
+          git diff --check
+          git diff -- setup/win/setup.iss setup/win_amd64/setup.iss
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add setup/win/setup.iss setup/win_amd64/setup.iss
+          git commit -m 'Preserve the full installed Windows version'
+          git push origin HEAD:fix/windows-installed-version
